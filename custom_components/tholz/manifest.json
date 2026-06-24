@@ -2,11 +2,11 @@
   "domain": "tholz",
   "name": "Tholz",
   "codeowners": [
-    "@felippepuhle"
+    "@carnei-ro"
   ],
   "config_flow": true,
-  "documentation": "https://github.com/felippepuhle/tholz-hass-integration",
+  "documentation": "https://github.com/carnei-ro/tholz-hass-integration",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/felippepuhle/tholz-hass-integration/issues",
-  "version": "0.2.9"
+  "issue_tracker": "https://github.com/carnei-ro/tholz-hass-integration/issues",
+  "version": "0.2.10"
 }
