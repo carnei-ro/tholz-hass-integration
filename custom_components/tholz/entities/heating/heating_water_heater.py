@@ -15,6 +15,14 @@ from .const import HEATING_TYPE, HEATING_OP_MODE
 from .utils import get_heating_type, get_valid_heatings
 
 
+# SMART_HEAT_V2: ao trocar o opMode o setpoint (sp, em °C) é ajustado.
+SMART_HEAT_V2_OPMODE_SP = {
+    STATE_ECO: 60,
+    STATE_HEAT_PUMP: 45,
+    STATE_PERFORMANCE: 45,
+}
+
+
 HEATING_WATER_HEATER_CONFIG = {
     HEATING_TYPE.SOLAR_PISCINA: {
         "sensor_key": "t2",
@@ -174,7 +182,20 @@ class HeatingWaterHeater(WaterHeaterEntity):
             return
 
         self._state["opMode"] = ha_to_tholz_opmode[operation_mode]
-        await self._manager.set_status(set_in({}, self._heating_key, self._state))
+        payload = set_in({}, self._heating_key, self._state)
+
+        # SMART_HEAT_V2: ao trocar o opMode, ajusta o setpoint em heatings.heat1.
+        if (
+            self._data.get("id") == DEVICE_MODEL.SMART_HEAT_V2
+            and self._heating_key[-1] == "heat0"
+        ):
+            sp = SMART_HEAT_V2_OPMODE_SP.get(operation_mode)
+            if sp is not None:
+                setpoint_key, setpoint_state = self._get_setpoint_target()
+                setpoint_state["sp"] = sp * 10
+                set_in(payload, setpoint_key, setpoint_state)
+
+        await self._manager.set_status(payload)
 
     @property
     def temperature_unit(self):
