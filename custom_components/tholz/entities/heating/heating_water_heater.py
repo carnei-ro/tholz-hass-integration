@@ -9,7 +9,7 @@ from homeassistant.components.water_heater import (
 from homeassistant.const import UnitOfTemperature
 
 from ...utils.const import DOMAIN, CONF_NAME_KEY, ENTITIES_SCAN_INTERVAL
-from ...utils.device import get_device_info
+from ...utils.device import DEVICE_MODEL, get_device_info
 from ...utils.dict import get_in, set_in
 from .const import HEATING_TYPE, HEATING_OP_MODE
 from .utils import get_heating_type, get_valid_heatings
@@ -117,6 +117,7 @@ def get_heating_water_heaters(hass, entry, manager, data):
                 device_info,
                 heating_key,
                 state,
+                data,
             )
         )
 
@@ -124,7 +125,7 @@ def get_heating_water_heaters(hass, entry, manager, data):
 
 
 class HeatingWaterHeater(WaterHeaterEntity):
-    def __init__(self, hass, entry, manager, device_info, heating_key, state):
+    def __init__(self, hass, entry, manager, device_info, heating_key, state, data):
         self._hass = hass
         self._entry = entry
         self._manager = manager
@@ -132,18 +133,39 @@ class HeatingWaterHeater(WaterHeaterEntity):
         self._heating_key = heating_key
 
         self._state = state
+        self._data = data
 
         self._attr_should_poll = True
         self._attr_scan_interval = ENTITIES_SCAN_INTERVAL
 
+    def _get_setpoint_target(self):
+        """
+        Retorna a tupla (key, state) usada para ler/escrever os setpoints
+        (sp, minSp, maxSp).
+
+        No SMART_HEAT_V2 o termostato (heat0) utiliza os setpoints de
+        heatings.heat1 em vez do próprio heat0.
+        """
+        if (
+            self._data.get("id") == DEVICE_MODEL.SMART_HEAT_V2
+            and self._heating_key[-1] == "heat0"
+        ):
+            key = ["heatings", "heat1"]
+            state = get_in(self._data, key)
+            if state is not None:
+                return key, state
+        return self._heating_key, self._state
+
     async def async_update(self):
         data = await self._manager.get_status()
         if data:
+            self._data = data
             self._state = get_in(data, self._heating_key)
 
     async def async_set_temperature(self, **kwargs):
-        self._state["sp"] = int(kwargs.get("temperature") * 10)
-        await self._manager.set_status(set_in({}, self._heating_key, self._state))
+        setpoint_key, setpoint_state = self._get_setpoint_target()
+        setpoint_state["sp"] = int(kwargs.get("temperature") * 10)
+        await self._manager.set_status(set_in({}, setpoint_key, setpoint_state))
 
     async def async_set_operation_mode(self, operation_mode):
         _, ha_to_tholz_opmode = get_opmode_maps(self._state)
@@ -168,7 +190,8 @@ class HeatingWaterHeater(WaterHeaterEntity):
 
     @property
     def target_temperature(self):
-        return self._state.get("sp", 0) / 10
+        _, setpoint_state = self._get_setpoint_target()
+        return setpoint_state.get("sp", 0) / 10
 
     @property
     def target_temperature_step(self):
@@ -178,7 +201,8 @@ class HeatingWaterHeater(WaterHeaterEntity):
     @property
     def min_temp(self):
         config = get_heating_water_heater_config(self._state)
-        min_sp = self._state.get("minSp")
+        _, setpoint_state = self._get_setpoint_target()
+        min_sp = setpoint_state.get("minSp")
         if min_sp is not None:
             return min_sp / 10
         if config.get("min_temp") is not None:
@@ -188,7 +212,8 @@ class HeatingWaterHeater(WaterHeaterEntity):
     @property
     def max_temp(self):
         config = get_heating_water_heater_config(self._state)
-        max_sp = self._state.get("maxSp")
+        _, setpoint_state = self._get_setpoint_target()
+        max_sp = setpoint_state.get("maxSp")
         if max_sp is not None:
             return max_sp / 10
         if config.get("max_temp") is not None:
