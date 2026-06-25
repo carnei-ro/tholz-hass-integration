@@ -195,6 +195,17 @@ class HeatingWaterHeater(WaterHeaterEntity):
                 setpoint_state["sp"] = sp * 10
                 set_in(payload, setpoint_key, setpoint_state)
 
+            # No modo PERFORMANCE, liga os apoios a gás e elétrico.
+            if operation_mode == STATE_PERFORMANCE:
+                for key, heating_state in (self._data.get("heatings") or {}).items():
+                    if get_heating_type(heating_state) in (
+                        HEATING_TYPE.APOIO_GAS,
+                        HEATING_TYPE.APOIO_ELETRICO,
+                    ):
+                        heating_state["on"] = True
+                        heating_state["opMode"] = HEATING_OP_MODE.LIGADO
+                        set_in(payload, ["heatings", key], heating_state)
+
         await self._manager.set_status(payload)
 
     @property
